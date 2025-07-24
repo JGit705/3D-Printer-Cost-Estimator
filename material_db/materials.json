@@ -1,0 +1,62 @@
+{
+  "PLA": {
+    "density": 1.24,
+    "cost_per_kg": 15.0,
+    "wastage_margin": 0.10,
+    "notes": "Easy to print, biodegradable, low warp"
+  },
+  "ABS": {
+    "density": 1.04,
+    "cost_per_kg": 18.0,
+    "wastage_margin": 0.12,
+    "notes": "Strong, requires heated bed, more brittle"
+  },
+  "PETG": {
+    "density": 1.27,
+    "cost_per_kg": 22.0,
+    "wastage_margin": 0.08,
+    "notes": "Flexible, strong, moisture-sensitive"
+  },
+  "Nylon": {
+    "density": 1.15,
+    "cost_per_kg": 30.0,
+    "wastage_margin": 0.15,
+    "notes": "Strong, flexible, needs high temps"
+  },
+  "TPU": {
+    "density": 1.21,
+    "cost_per_kg": 25.0,
+    "wastage_margin": 0.12,
+    "notes": "Flexible rubber-like, slow to print"
+  },
+  "ASA": {
+    "density": 1.07,
+    "cost_per_kg": 25.0,
+    "wastage_margin": 0.10,
+    "notes": "UV/weather resistant, alternative to ABS"
+  },
+  "PC": {
+    "density": 1.20,
+    "cost_per_kg": 30.0,
+    "wastage_margin": 0.15,
+    "notes": "Very strong, high temp, difficult to print"
+  },
+  "HIPS": {
+    "density": 1.04,
+    "cost_per_kg": 18.0,
+    "wastage_margin": 0.10,
+    "notes": "Used as dissolvable support material"
+  },
+  "PVA": {
+    "density": 1.19,
+    "cost_per_kg": 40.0,
+    "wastage_margin": 0.20,
+    "notes": "Water-soluble support material"
+  },
+  "Carbon Fiber Reinforced PLA": {
+    "density": 1.30,
+    "cost_per_kg": 35.0,
+    "wastage_margin": 0.12,
+    "notes": "PLA mixed with carbon fiber, stiffer & lighter"
+  }
+} 
