@@ -4,3 +4,5 @@ pandas>=2.0.0
 trimesh>=3.23.0
 plotly>=5.15.0
 scipy>=1.11.0
+networkx>=2.8.0
+lxml>=4.9.0

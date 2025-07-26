@@ -1,7 +1,7 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
-from utils.stl_parser import parse_stl
+from utils.stl_parser import parse_3d_file
 from utils.cost_calculator import (
     calc_material_cost, calc_energy_cost, calc_total_cost, get_materials
 )
@@ -186,153 +186,202 @@ if business_mode:
 else:
     markup_percent = st.sidebar.slider("Markup (%)", 0, 100, 20)
 
-# --- Main: STL Upload ---
-st.subheader("Upload STL File")
-uploaded_file = st.file_uploader("Choose an STL file", type=["stl"])
+# --- Main: STL Upload and Processing ---
+st.subheader("Upload 3D Model Files")
+uploaded_files = st.file_uploader(
+    "Upload your 3D model files", 
+    type=["stl", "obj", "3mf"],
+    accept_multiple_files=True,
+    help="Supported formats: STL, OBJ, 3MF"
+)
 
-if uploaded_file:
-    # Parse STL
-    try:
-        volume_cm3, bbox = parse_stl(uploaded_file)
-        st.success(f"Volume: {volume_cm3:.2f} cm³")
-        st.write(f"Bounding Box: {bbox}")
-        # --- STL Preview (Interactive) ---
-        import trimesh
-        import plotly.graph_objects as go
-        import streamlit as st
+if uploaded_files:
+    # Create tabs for each uploaded file
+    tabs = st.tabs([f.name for f in uploaded_files])
+    
+    # Process each file in its own tab
+    for tab, uploaded_file in zip(tabs, uploaded_files):
+        with tab:
+            try:
+                # Parse file and get volume
+                file_extension = uploaded_file.name.split('.')[-1].lower()
+                volume_cm3, bbox, mesh = parse_3d_file(uploaded_file, file_extension)
+                st.success(f"Volume: {volume_cm3:.2f} cm³")
 
-        st.subheader("STL Preview")
+                # Convert volume for later use
+                volume_mm3 = volume_cm3 * 1000  # convert cm³ to mm³
 
-        try:
-            # Load the STL file
-            mesh_or_scene = trimesh.load(uploaded_file, file_type='stl')
+                # Reset file pointer for preview
+                uploaded_file.seek(0)
 
-            # Handle Scene vs Mesh
-            if isinstance(mesh_or_scene, trimesh.Scene):
-                # Combine geometries if available
-                geometries = list(mesh_or_scene.geometry.values())
-                if len(geometries) == 0:
-                    raise ValueError("No geometry found in STL scene.")
-                mesh = trimesh.util.concatenate(geometries)
-            elif isinstance(mesh_or_scene, trimesh.Trimesh):
-                if mesh_or_scene.is_empty:
-                    raise ValueError("STL mesh is empty.")
-                mesh = mesh_or_scene
+                # --- 3D Preview (Interactive) ---
+                st.subheader("3D Preview")
+
+                # Import required libraries for 3D visualization
+                import plotly.graph_objects as go
+
+                # Extract vertices and faces
+                x, y, z = mesh.vertices.T
+                i, j, k = mesh.faces.T
+
+                # Center the model on origin
+                center = mesh.centroid
+                x -= center[0]
+                y -= center[1]
+                z -= center[2]
+
+                # Create the 3D mesh figure
+                fig = go.Figure(data=[
+                    go.Mesh3d(
+                        x=x, y=y, z=z,
+                        i=i, j=j, k=k,
+                        color='lightblue', opacity=0.5
+                    )
+                ])
+                
+                # Update layout with proper syntax
+                fig.update_layout(
+                    scene=dict(
+                        aspectmode='data',
+                        camera=dict(
+                            eye=dict(x=1.25, y=1.25, z=1.25),  # Good default view angle
+                            center=dict(x=0, y=0, z=0)
+                        )
+                    ),
+                    margin=dict(l=0, r=0, b=0, t=0)
+                )  # Single closing parenthesis here
+                
+                st.plotly_chart(fig, use_container_width=True)
+
+            except Exception as e:
+                st.warning(f"Could not process {uploaded_file.name}: {e}")
+                continue
+
+            # --- Estimate Print Time ---
+            from utils.cost_calculator import estimate_print_time
+            nozzle_diameter = 0.4
+            layer_height = 0.2
+            print_speed = 50
+            efficiency_factor = 1.1
+            
+            if 'volume_mm3' in locals():
+                try:
+                    print_time_result = estimate_print_time(volume_mm3, nozzle_diameter, layer_height, print_speed, efficiency_factor)
+
+                    if "error" in print_time_result:
+                        st.error("Could not estimate print time: invalid geometry or settings.")
+                        print_time_hr = 1.0
+                    else:
+                        print_time_hr = print_time_result["print_time_hours"]
+                except Exception as e:
+                    st.error(f"Failed to estimate print time: {e}")
+                    st.stop()
             else:
-                raise ValueError("Unsupported STL format or no mesh found.")
+                st.error("Error: Volume not calculated. Please upload a valid 3D model file.")
+                st.stop()
 
-            # Extract vertices and faces
-            x, y, z = mesh.vertices.T
-            i, j, k = mesh.faces.T
+            # --- Cost Calculation ---
+            material_cost = calc_material_cost(volume_cm3, density, cost_per_kg)
+            energy_cost = calc_energy_cost(print_time_hr, power_watt, electricity_rate)
+            
+            if business_mode:
+                depreciation_cost = calc_depreciation(printer_cost, printer_lifespan, print_time_hr)
+                labour_cost = calc_labour(setup_time, post_time, hourly_wage)
+                base_cost = material_cost + energy_cost + depreciation_cost + labour_cost
+                adjusted_cost = apply_fail_rate(base_cost, fail_rate)
+                adjusted_cost += shipping_cost
+                final_price = adjusted_cost * (1 + markup_percent / 100)
+                total_cost = final_price
+            else:
+                total_cost = calc_total_cost(material_cost, energy_cost, markup_percent)
 
-            # Plot using Plotly
-            fig = go.Figure(data=[
-                go.Mesh3d(
-                    x=x, y=y, z=z,
-                    i=i, j=j, k=k,
-                    color='lightblue', opacity=0.5
+            # --- Modern Minimalist Summary ---
+            if print_time_hr < 1:
+                print_time_min = int(round(print_time_hr * 60))
+                time_label = 'Estimated Print Time (min)'
+                time_value = f"{print_time_min} min"
+            else:
+                time_label = 'Estimated Print Time (h)'
+                time_value = f"{print_time_hr:.2f} h"
+            st.markdown(f"""
+                <div style='display: flex; gap: 2em; justify-content: center; margin: 2em 0;'>
+                    <div style='background: #22272e; border-radius: 1em; padding: 1.5em 2em; min-width: 220px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.07);'>
+                        <div style='color: #4CAF50; font-size: 1.1em; letter-spacing: 1px; margin-bottom: 0.5em;'>{time_label}</div>
+                        <div style='font-size: 2.5em; font-weight: 700; color: #fff;'>{time_value}</div>
+                    </div>
+                    <div style='background: #22272e; border-radius: 1em; padding: 1.5em 2em; min-width: 220px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.07);'>
+                        <div style='color: #2196F3; font-size: 1.1em; letter-spacing: 1px, margin-bottom: 0.5em;'>Total Cost</div>
+                        <div style='font-size: 2.5em, font-weight: 700; color: #fff;'>{symbol}{total_cost:.2f}</div>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+
+            # --- Detailed Breakdown in Expander ---
+            with st.expander('Show Detailed Cost Breakdown'):
+                import pandas as pd
+                if business_mode:
+                    st.markdown("#### Cost Breakdown (Business Mode)")
+                    breakdown_data = {
+                        "Cost Type": [
+                            "Material", "Energy", "Depreciation", "Labour", "Base", "Fail Adj.", "Shipping", "Markup", "Total"
+                        ],
+                        "Amount": [
+                            material_cost, energy_cost, depreciation_cost, labour_cost, base_cost,
+                            adjusted_cost - shipping_cost, shipping_cost, final_price - adjusted_cost, final_price
+                        ]
+                    }
+                else:
+                    st.markdown("#### Cost Breakdown")
+                    breakdown_data = {
+                        "Cost Type": ["Material", "Energy", "Markup"],
+                        "Amount": [material_cost, energy_cost, total_cost - material_cost - energy_cost]
+                    }
+                df = pd.DataFrame(breakdown_data)
+                df["Amount"] = df["Amount"].apply(lambda x: f"{symbol}{x:,.2f}")
+                st.dataframe(
+                    df.style
+                      .hide(axis='index')
+                      .set_properties(**{
+                          'background-color': '#22272e',
+                          'color': '#fff',
+                          'border-color': '#22272e',
+                          'font-size': '1.1em'
+                      })
+                      .set_table_styles([
+                          {'selector': 'th', 'props': [('background-color', '#1a1d23'), ('color', '#4CAF50'), ('font-size', '1.1em')]}
+                      ]),
+                    use_container_width=True,
+                    hide_index=True
                 )
-            ])
-            fig.update_layout(
-                scene=dict(aspectmode='data'),
-                margin=dict(l=0, r=0, b=0, t=0)
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        except Exception as e:
-            st.warning(f"Could not render STL preview: {e}")
-    except Exception as e:
-        st.error(f"Failed to parse STL: {e}")
-        st.stop()
-
-    # --- Estimate Print Time ---
-    from utils.cost_calculator import estimate_print_time
-    # Use defaults: nozzle_diameter=0.4mm, layer_height=0.2mm, print_speed=50mm/s, efficiency_factor=1.1
-    nozzle_diameter = 0.4
-    layer_height = 0.2
-    print_speed = 50
-    efficiency_factor = 1.1
-    volume_mm3 = volume_cm3 * 1000  # convert cm³ to mm³
-    print_time_result = estimate_print_time(volume_mm3, nozzle_diameter, layer_height, print_speed, efficiency_factor)
-    if "error" in print_time_result:
-        st.error("Could not estimate print time: invalid geometry or settings.")
-        print_time_hr = 1.0
-    else:
-        print_time_hr = print_time_result["print_time_hours"]
-
-    # --- Cost Calculation ---
-    material_cost = calc_material_cost(volume_cm3, density, cost_per_kg)
-    energy_cost = calc_energy_cost(print_time_hr, power_watt, electricity_rate)
-    if business_mode:
-        depreciation_cost = calc_depreciation(printer_cost, printer_lifespan, print_time_hr)
-        labour_cost = calc_labour(setup_time, post_time, hourly_wage)
-        base_cost = material_cost + energy_cost + depreciation_cost + labour_cost
-        adjusted_cost = apply_fail_rate(base_cost, fail_rate)
-        adjusted_cost += shipping_cost
-        final_price = adjusted_cost * (1 + markup_percent / 100)
-        total_cost = final_price
-    else:
-        total_cost = calc_total_cost(material_cost, energy_cost, markup_percent)
-
-    # --- Modern Minimalist Summary ---
-    if print_time_hr < 1:
-        print_time_min = int(round(print_time_hr * 60))
-        time_label = 'Estimated Print Time (min)'
-        time_value = f"{print_time_min} min"
-    else:
-        time_label = 'Estimated Print Time (h)'
-        time_value = f"{print_time_hr:.2f} h"
-    st.markdown(f"""
-        <div style='display: flex; gap: 2em; justify-content: center; margin: 2em 0;'>
-            <div style='background: #22272e; border-radius: 1em; padding: 1.5em 2em; min-width: 220px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.07);'>
-                <div style='color: #4CAF50; font-size: 1.1em; letter-spacing: 1px; margin-bottom: 0.5em;'>{time_label}</div>
-                <div style='font-size: 2.5em; font-weight: 700; color: #fff;'>{time_value}</div>
-            </div>
-            <div style='background: #22272e; border-radius: 1em; padding: 1.5em 2em; min-width: 220px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.07);'>
-                <div style='color: #2196F3; font-size: 1.1em; letter-spacing: 1px; margin-bottom: 0.5em;'>Total Cost</div>
-                <div style='font-size: 2.5em; font-weight: 700; color: #fff;'>{symbol}{total_cost:.2f}</div>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-
-    # --- Detailed Breakdown in Expander ---
-    with st.expander('Show Detailed Cost Breakdown'):
-        import pandas as pd
-        if business_mode:
-            st.markdown("#### Cost Breakdown (Business Mode)")
-            breakdown_data = {
-                "Cost Type": [
-                    "Material", "Energy", "Depreciation", "Labour", "Base", "Fail Adj.", "Shipping", "Markup", "Total"
-                ],
-                "Amount": [
-                    material_cost, energy_cost, depreciation_cost, labour_cost, base_cost,
-                    adjusted_cost - shipping_cost, shipping_cost, final_price - adjusted_cost, final_price
-                ]
-            }
-        else:
-            st.markdown("#### Cost Breakdown")
-            breakdown_data = {
-                "Cost Type": ["Material", "Energy", "Markup"],
-                "Amount": [material_cost, energy_cost, total_cost - material_cost - energy_cost]
-            }
-        df = pd.DataFrame(breakdown_data)
-        df["Amount"] = df["Amount"].apply(lambda x: f"{symbol}{x:,.2f}")
-        st.dataframe(
-            df.style
-              .hide(axis='index')
-              .set_properties(**{
-                  'background-color': '#22272e',
-                  'color': '#fff',
-                  'border-color': '#22272e',
-                  'font-size': '1.1em'
-              })
-              .set_table_styles([
-                  {'selector': 'th', 'props': [('background-color', '#1a1d23'), ('color', '#4CAF50'), ('font-size', '1.1em')]}
-              ]),
-            use_container_width=True,
-            hide_index=True
-        )
-        plot_cost_pie(material_cost, energy_cost, total_cost if not business_mode else final_price)
+                plot_cost_pie(material_cost, energy_cost, total_cost if not business_mode else final_price)
 
 else:
-    st.info("Please upload an STL file to begin.") 
+    st.info("Please upload one or more 3D model files to begin.")
+    
+    # Show empty cost breakdown with example format
+    st.markdown("#### Cost Breakdown")
+    empty_data = {
+        "Cost Type": ["Material", "Energy", "Markup"],
+        "Amount": [f"{symbol}0.00", f"{symbol}0.00", f"{symbol}0.00"]
+    }
+    df = pd.DataFrame(empty_data)
+    
+    st.dataframe(
+        df.style
+        .hide(axis='index')
+        .set_properties(**{
+            'background-color': '#22272e',
+            'color': '#fff',
+            'border-color': '#22272e',
+            'font-size': '1.1em'
+        })
+        .set_table_styles([
+            {'selector': 'th', 'props': [
+                ('background-color', '#1a1d23'),
+                ('color', '#4CAF50'),
+                ('font-size', '1.1em')
+            ]}
+        ]),
+        use_container_width=True,
+        hide_index=True
+    )
