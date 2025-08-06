@@ -4,8 +4,58 @@ import json
 # Load materials from JSON
 MATERIALS_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'material_db', 'materials.json')
 def get_materials():
-    with open(MATERIALS_PATH, 'r') as f:
-        return json.load(f)
+    return {
+        "PLA": {
+            "density": 1.24,       # g/cm³
+            "cost_per_kg": 25.00,  # £/kg
+            "diameters": [1.75, 2.85]
+        },
+        "PETG": {
+            "density": 1.27,
+            "cost_per_kg": 30.00,
+            "diameters": [1.75, 2.85]
+        },
+        "ABS": {
+            "density": 1.01,
+            "cost_per_kg": 20.00,
+            "diameters": [1.75, 2.85]
+        },
+        "TPU": {
+            "density": 1.21,
+            "cost_per_kg": 35.00,
+            "diameters": [1.75, 2.85]
+        },
+        "Nylon": {
+            "density": 1.02,
+            "cost_per_kg": 100.00,
+            "diameters": [1.75, 2.85]
+        },
+        "PC": {
+            "density": 1.19,
+            "cost_per_kg": 40.00,
+            "diameters": [1.75, 2.85]
+        },
+        "ASA": {
+            "density": 1.08,
+            "cost_per_kg": 30.00,
+            "diameters": [1.75, 2.85]
+        },
+        "PVA": {
+            "density": 1.23,
+            "cost_per_kg": 40.00,
+            "diameters": [1.75]  # Usually only in 1.75 mm for support material
+        },
+        "HIPS": {
+            "density": 1.04,
+            "cost_per_kg": 35.00,
+            "diameters": [1.75, 2.85]  # Some brands do both, often used for supports
+        },
+        "Carbon Fiber (PLA‑based)": {
+            "density": 1.19,
+            "cost_per_kg": 65.00,
+            "diameters": [1.75, 2.85]
+        }
+    }
 
 def calc_material_cost(volume_cm3, density_g_cm3, cost_per_kg):
     """
