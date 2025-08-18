@@ -529,8 +529,80 @@ if uploaded_files:
                 # Calculate material cost
                 material_cost = calc_material_cost(volume_cm3, density, cost_per_kg)
                 
-                # Calculate print time (basic estimation)
-                print_time_hr = volume_cm3 / 11.0  # Simple approximation
+                # --- Print Time Input ---
+                st.markdown("### Print Duration")
+                col_time1, col_time2 = st.columns(2)
+                with col_time1:
+                    print_hours = st.number_input(
+                        "Hours",
+                        min_value=0,
+                        value=0,
+                        step=1,
+                        help="Enter the print duration hours from your slicer"
+                    )
+                with col_time2:
+                    print_minutes = st.number_input(
+                        "Minutes",
+                        min_value=0,
+                        max_value=59,
+                        value=0,
+                        step=1,
+                        help="Enter the print duration minutes from your slicer"
+                    )
+
+                # Calculate total print time in hours
+                print_time_hr = print_hours + (print_minutes / 60)
+
+                # Add instructions for users
+                with st.expander("How to find print time & configure settings"):
+                    st.markdown("""
+                        ### Getting Accurate Print Time
+                        1. Open your slicer software (Cura, PrusaSlicer, etc.)
+                        2. Configure your print settings:
+                           - **Layer Height**: Smaller = longer print time, better quality
+                           - **Infill Density**: Higher = longer print time, stronger part
+                           - **Print Speed**: Faster = lower quality but shorter print time
+                        
+                        ### Support Settings
+                        Support structures will increase material usage and print time:
+                        
+                        **Support Types:**
+                        - **None**: No additional cost
+                        - **Regular**: Add 10-20% to material cost
+                        - **Tree**: Add 5-15% to material cost
+                        - **Soluble**: Add 30-50% to material cost (PVA/HIPS)
+                        
+                        ### Final Steps
+                        3. Configure supports if needed
+                        4. Slice the model
+                        5. Look for the estimated print time in the slice info
+                        6. Enter the hours and minutes shown
+                        
+                        **Note**: Actual print times may vary based on printer settings and conditions.
+                    """)
+                    
+                    # Support type selection
+                    support_type = st.selectbox(
+                        "Support Type",
+                        options=["None", "Regular", "Tree", "Soluble"],
+                        help="Select the type of supports needed for your print"
+                    )
+                    
+                    # Calculate support cost multiplier
+                    support_multipliers = {
+                        "None": 1.0,
+                        "Regular": 1.15,  # 15% increase
+                        "Tree": 1.10,     # 10% increase
+                        "Soluble": 1.40   # 40% increase
+                    }
+                    
+                    support_multiplier = support_multipliers[support_type]
+                    
+                    # Apply support multiplier to material cost
+                    material_cost = material_cost * support_multiplier
+                    
+                    if support_type != "None":
+                        st.info(f"Material cost adjusted for {support_type} supports (+{((support_multiplier-1)*100):.0f}%)")
                 
                 # Calculate energy cost
                 energy_cost = calc_energy_cost(print_time_hr, power, electricity_rate)
